@@ -56,7 +56,7 @@
            [(str here "/" to "/" rel) (names/rename-source text)])
          (for [f (fs/glob (str here "/" (first resources)) "**")
                :when (fs/regular-file? f)
-               :let [rel (subs (str f) (inc (count (str here "/" (first resources)))))]]
+               :let [rel (str/replace (subs (str f) (inc (count (str here "/" (first resources))))) "\\" "/")]]
            [(str here "/" (second resources) "/" rel) (slurp (str f))]))))
 (def existing (set (map #(str/replace (str %) "\\" "/") (concat (fs/glob (str here "/src") "**.{clj,cljc}") (filter fs/regular-file? (fs/glob (str here "/resources") "**"))))))
 (if check?
