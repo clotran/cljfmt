@@ -1,5 +1,6 @@
 #!/usr/bin/env bb
-;; Writes src/ from the three libraries vendored unmodified in upstream/:
+;; Writes src/ and resources/ from the three libraries in upstream/, each a
+;; submodule at an exact commit (upstream/README.md):
 ;; cljfmt's core, rewrite-clj and tools.reader, each file through clotran's
 ;; own renaming (upstream/names.clj in the clotran checkout CLOTRAN names,
 ;; default beside this one), and every reader conditional with a :clj
@@ -15,7 +16,10 @@
 (def here (str (fs/parent (fs/canonicalize *file*))))
 (def clotran (or (System/getenv "CLOTRAN") (str here "/../clotran")))
 (load-file (str clotran "/upstream/names.clj"))
-(def trees [["upstream/cljfmt/src" "src"] ["upstream/rewrite-clj/src" "src"] ["upstream/tools.reader/src" "src"]])
+;; the submodules' source trees (upstream/README.md): cljfmt's core alone, its
+;; command and file handling being the JVM's; and cljfmt's resources, verbatim
+(def trees [["upstream/cljfmt/cljfmt/src" "src" #"cljfmt/core\.cljc$"] ["upstream/rewrite-clj/src" "src" nil] ["upstream/tools.reader/src/main/clojure" "src" nil]])
+(def resources ["upstream/cljfmt/cljfmt/resources" "resources"])
 (def check? (= "--check" (first *command-line-args*)))
 
 (defn add-cljf
@@ -41,13 +45,19 @@
 
 (def outputs
   (into (sorted-map)
-        (for [[from to] trees
-              f (fs/glob (str here "/" from) "**.{clj,cljc}")
-              :let [rel (str/replace (subs (str f) (inc (count (str here "/" from)))) "\\" "/")
-                    text (slurp (str f))
-                    text (if (str/ends-with? rel ".cljc") (add-cljf text) text)]]
-          [(str here "/" to "/" rel) (names/rename-source text)])))
-(def existing (set (map str (fs/glob (str here "/src") "**.{clj,cljc}"))))
+        (concat
+         (for [[from to only] trees
+               f (fs/glob (str here "/" from) "**.{clj,cljc}")
+               :let [rel (str/replace (subs (str f) (inc (count (str here "/" from)))) "\\" "/")]
+               :when (or (nil? only) (re-find only rel))
+               :let [text (slurp (str f))
+                     text (if (str/ends-with? rel ".cljc") (add-cljf text) text)]]
+           [(str here "/" to "/" rel) (names/rename-source text)])
+         (for [f (fs/glob (str here "/" (first resources)) "**")
+               :when (fs/regular-file? f)
+               :let [rel (subs (str f) (inc (count (str here "/" (first resources)))))]]
+           [(str here "/" (second resources) "/" rel) (slurp (str f))]))))
+(def existing (set (concat (map str (fs/glob (str here "/src") "**.{clj,cljc}")) (map str (filter fs/regular-file? (fs/glob (str here "/resources") "**"))))))
 (if check?
   (let [stale (concat (for [[p text] outputs :when (not= text (when (fs/exists? p) (slurp p)))] p)
                       (remove outputs existing))]

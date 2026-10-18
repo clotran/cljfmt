@@ -2,18 +2,18 @@ cljfmt on clotran
 Copyright (c) James Borden
 
 derive, test/ and scripts/ are made available under the Eclipse Public
-License 2.0 (LICENSE). Everything under upstream/ and src/ is third-party
-source, vendored unmodified or derived from it, and keeps its own license,
-which nothing here changes:
+License 2.0 (LICENSE). upstream/ holds three submodules, pointers to the
+libraries' own repositories at exact commits; src/ and resources/ are
+derived from them and keep their licenses, which nothing here changes:
 
-- upstream/cljfmt and src/cljfmt: cljfmt 0.16.6, copyright James Reeves,
-  Eclipse Public License 1.0 (upstream/cljfmt/LICENSE).
-- upstream/rewrite-clj and src/rewrite_clj*: rewrite-clj v1.2.50,
-  copyright 2013-2018 Yannick Scherer and the clj-commons contributors,
-  MIT License (upstream/rewrite-clj/LICENSE).
-- upstream/tools.reader and src/clojure/tools/reader: tools.reader v1.5.2,
-  copyright Rich Hickey and contributors, Eclipse Public License 1.0
-  (upstream/tools.reader/LICENSE).
+- src/cljfmt and resources/cljfmt: cljfmt 0.16.6, copyright James Reeves,
+  Eclipse Public License 1.0 (licenses/cljfmt-LICENSE).
+- src/rewrite_clj*: rewrite-clj v1.2.50, copyright 2013-2018 Yannick
+  Scherer and the clj-commons contributors, MIT License
+  (licenses/rewrite-clj-LICENSE).
+- src/clojure/tools/reader: tools.reader v1.5.2, copyright Rich Hickey
+  and contributors, Eclipse Public License 1.0
+  (licenses/tools.reader-LICENSE).
 
 src/ is derived: each file is its upstream file through clotran's class
 renaming, and each reader conditional with a :clj branch gains a :cljf one.

@@ -14,7 +14,7 @@ echo "ok   - src/ is what ./derive writes"
 # libraries, and the three vendored libraries' own sources
 { ls "$CLOTRAN"/src/clj/clotran/*.cljf "$CLOTRAN"/test/clj/*.clj "$CLOTRAN"/examples/*.cljf "$CLOTRAN"/examples/*/*.cljf 2>/dev/null
   ls "$CLOTRAN"/src/clj/clojure/walk.clj "$CLOTRAN"/src/clj/clojure/set.clj "$CLOTRAN"/src/clj/clojure/string.clj "$CLOTRAN"/src/clj/clojure/zip.clj
-  find "$here/upstream" -name '*.clj' -o -name '*.cljc' | sort; } > "$work/corpus"
+  find "$here/upstream/cljfmt/cljfmt/src" "$here/upstream/rewrite-clj/src" "$here/upstream/tools.reader/src/main/clojure" -name '*.clj' -o -name '*.cljc' | sort; } > "$work/corpus"
 n=$(wc -l < "$work/corpus" | tr -d ' ')
 cat > "$work/drive.cljf" <<CLJ
 (require 'cljfmt.core 'clojure.string)

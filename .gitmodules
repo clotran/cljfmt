@@ -1,0 +1,9 @@
+[submodule "upstream/cljfmt"]
+	path = upstream/cljfmt
+	url = https://github.com/weavejester/cljfmt.git
+[submodule "upstream/rewrite-clj"]
+	path = upstream/rewrite-clj
+	url = https://github.com/clj-commons/rewrite-clj.git
+[submodule "upstream/tools.reader"]
+	path = upstream/tools.reader
+	url = https://github.com/clojure/tools.reader.git

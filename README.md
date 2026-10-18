@@ -6,8 +6,9 @@ as it is, byte for byte, so code formatted on clotran looks as code formatted
 anywhere else does. It is also the proof that a portable `.cljc` library runs
 on clotran: cljfmt's core, [rewrite-clj](https://github.com/clj-commons/rewrite-clj)
 under it and Clojure's [tools.reader](https://github.com/clojure/tools.reader)
-under that -- some 12,000 lines -- are vendored unmodified in `upstream/`
-and derived into `src/` by `./derive`, which adds a `:cljf` branch wherever
+under that -- some 12,000 lines -- are submodules in `upstream/`, pointers
+to their repositories at exact commits (`upstream/README.md`), derived
+into `src/` by `./derive`, which adds a `:cljf` branch wherever
 a reader conditional has a `:clj` one and writes each host class in
 clotran's name. Nothing else is changed (clotran's `DEVIATIONS.md` 33 and
 `PACKAGES.md`, vendoring rule 6).
@@ -40,5 +41,5 @@ three libraries' own sources -- through this port on clotran and through
 cljfmt 0.16.6 on `clj`, and every file must come out identical. The fuzzer
 generates code (nested forms, comments, strings, metadata, reader macros,
 odd whitespace) and asks the same. `./derive --check` says whether `src/`
-is what `derive` writes; both run in clotran's gate when this repository
-is beside its checkout.
+is what `derive` writes (`git submodule update --init` first); both run in
+clotran's gate when this repository is beside its checkout.
