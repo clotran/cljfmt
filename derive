@@ -13,7 +13,8 @@
 ;;   ./derive --check   exit 1 if src/ is not what this writes
 (require '[babashka.fs :as fs] '[clojure.string :as str]
          '[rewrite-clj.zip :as z] '[rewrite-clj.node :as n])
-(def here (str (fs/parent (fs/canonicalize *file*))))
+;; one separator everywhere, so a path from a glob on Windows matches a key here
+(def here (str/replace (str (fs/parent (fs/canonicalize *file*))) "\\" "/"))
 (def clotran (or (System/getenv "CLOTRAN") (str here "/../clotran")))
 (load-file (str clotran "/upstream/names.clj"))
 ;; the submodules' source trees (upstream/README.md): cljfmt's core alone, its
@@ -57,7 +58,7 @@
                :when (fs/regular-file? f)
                :let [rel (subs (str f) (inc (count (str here "/" (first resources)))))]]
            [(str here "/" (second resources) "/" rel) (slurp (str f))]))))
-(def existing (set (concat (map str (fs/glob (str here "/src") "**.{clj,cljc}")) (map str (filter fs/regular-file? (fs/glob (str here "/resources") "**"))))))
+(def existing (set (map #(str/replace (str %) "\\" "/") (concat (fs/glob (str here "/src") "**.{clj,cljc}") (filter fs/regular-file? (fs/glob (str here "/resources") "**"))))))
 (if check?
   (let [stale (concat (for [[p text] outputs :when (not= text (when (fs/exists? p) (slurp p)))] p)
                       (remove outputs existing))]
