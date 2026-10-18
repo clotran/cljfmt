@@ -1,0 +1,60 @@
+#!/usr/bin/env bb
+;; Writes src/ from the three libraries vendored unmodified in upstream/:
+;; cljfmt's core, rewrite-clj and tools.reader, each file through clotran's
+;; own renaming (upstream/names.clj in the clotran checkout CLOTRAN names,
+;; default beside this one), and every reader conditional with a :clj
+;; branch given a :cljf branch -- the :clj one, renamed -- unless it has one
+;; already. clotran claims :cljf and never :clj (its DEVIATIONS 33), so the
+;; :cljf branch IS the port: nothing else changes. src/ is generated: never
+;; edit it, edit this and run it.
+;;
+;;   ./derive           write src/
+;;   ./derive --check   exit 1 if src/ is not what this writes
+(require '[babashka.fs :as fs] '[clojure.string :as str]
+         '[rewrite-clj.zip :as z] '[rewrite-clj.node :as n])
+(def here (str (fs/parent (fs/canonicalize *file*))))
+(def clotran (or (System/getenv "CLOTRAN") (str here "/../clotran")))
+(load-file (str clotran "/upstream/names.clj"))
+(def trees [["upstream/cljfmt/src" "src"] ["upstream/rewrite-clj/src" "src"] ["upstream/tools.reader/src" "src"]])
+(def check? (= "--check" (first *command-line-args*)))
+
+(defn add-cljf
+  "The text with a :cljf branch, a copy of the :clj one, in every reader
+  conditional that has :clj and not :cljf; nested ones too."
+  [text]
+  (loop [loc (z/of-string text)]
+    (if (z/end? loc)
+      (z/root-string loc)
+      (if (and (= :reader-macro (z/tag loc)) (#{"?" "?@"} (str (z/sexpr (z/down loc)))))
+        (let [lst (z/right (z/down loc))
+              kids (z/down lst)
+              keys (loop [k kids acc []] (if (nil? k) acc (recur (some-> k z/right z/right) (conj acc (z/sexpr k)))))]
+          (if (and (some #{:clj} keys) (not (some #{:cljf} keys)))
+            (let [cljk (loop [k kids] (if (= :clj (z/sexpr k)) k (recur (-> k z/right z/right))))
+                  branch (z/right cljk)
+                  ws (n/whitespace-node " ")
+                  ;; :cljf <branch> before :clj, with the whitespace that followed :clj
+                  loc2 (-> cljk (z/insert-left (z/node branch)) z/left (z/insert-left (n/keyword-node :cljf)) z/left (z/insert-right ws) z/right z/right (z/insert-right ws) z/up z/up)]
+              (recur (z/next loc2)))
+            (recur (z/next loc))))
+        (recur (z/next loc))))))
+
+(def outputs
+  (into (sorted-map)
+        (for [[from to] trees
+              f (fs/glob (str here "/" from) "**.{clj,cljc}")
+              :let [rel (str/replace (subs (str f) (inc (count (str here "/" from)))) "\\" "/")
+                    text (slurp (str f))
+                    text (if (str/ends-with? rel ".cljc") (add-cljf text) text)]]
+          [(str here "/" to "/" rel) (names/rename-source text)])))
+(def existing (set (map str (fs/glob (str here "/src") "**.{clj,cljc}"))))
+(if check?
+  (let [stale (concat (for [[p text] outputs :when (not= text (when (fs/exists? p) (slurp p)))] p)
+                      (remove outputs existing))]
+    (doseq [p (take 10 stale)] (println "not as ./derive writes it:" p))
+    (System/exit (if (seq stale) 1 0)))
+  (do (doseq [p existing :when (not (outputs p))] (fs/delete p))
+      (doseq [[p text] outputs]
+        (fs/create-dirs (fs/parent p))
+        (when (not= text (when (fs/exists? p) (slurp p))) (spit p text)))
+      (println "derive:" (count outputs) "files")))

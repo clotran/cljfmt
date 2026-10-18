@@ -1,0 +1,75 @@
+#!/usr/bin/env bb
+;; fuzz-format: generated code through cljfmt on clotran and on clj, byte for
+;; byte (clotran's PLAN step 36).
+;;
+;;   scripts/fuzz-format [-n N] [-s SEED]
+;;
+;; N files of random top-level forms -- defn and def with and without
+;; docstrings, let, when, cond, threading, maps, vectors, sets, strings with
+;; escapes, keywords, numbers, characters, metadata, quote and syntax-quote,
+;; #() and #{}, discards, line comments, blank lines, and whitespace put
+;; wherever the generator feels like -- formatted by reformat-string on both
+;; hosts; every output must be identical, and neither may fail where the
+;; other succeeds.
+(require '[clojure.test.check.generators :as g]
+         '[clojure.string :as str]
+         '[babashka.fs :as fs]
+         '[babashka.process :as p])
+
+(def opts (loop [as *command-line-args* o {:n 30 :seed 1}]
+            (if (empty? as) o
+                (case (first as)
+                  "-n" (recur (drop 2 as) (assoc o :n (parse-long (second as))))
+                  "-s" (recur (drop 2 as) (assoc o :seed (parse-long (second as))))
+                  (do (println "usage: scripts/fuzz-format [-n N] [-s SEED]") (System/exit 2))))))
+(def here (str (fs/parent (fs/parent (fs/canonicalize *file*)))))
+(def clotran (or (System/getenv "CLOTRAN") (str here "/../clotran")))
+
+(def g-ws (g/elements ["" " " "  " "\n" "\n  " "\n\n" "\t" "\n      " " \n"]))
+(def g-name (g/fmap #(str "x" %) (g/choose 0 20)))
+(def g-atom (g/one-of [g-name (g/fmap str (g/choose -99 999)) (g/elements ["1.5" "-0.25" "1e3" "1/2" "2N" "3M" "0x1F" "\\a" "\\space" "\\newline" "true" "nil" ":k" ":ns/k" "::q" "\"s\"" "\"two\\nlines\"" "\"q\\\"d\"" "#\"re.*\"" "'sym" "`qq" "~u" "@a" "#'v" "^:m" "^{:doc \"d\"}"])]))
+(def g-form
+  (g/recursive-gen
+   (fn [inner]
+     (g/one-of
+      [(g/let [h (g/elements ["defn" "def" "let" "when" "if" "cond" "->" "->>" "do" "fn" "loop" "case" "try" "ns"]) nm g-name args (g/vector inner 0 4) ws g-ws]
+         (g/return (str "(" h ws nm ws (str/join ws args) ")")))
+       (g/let [items (g/vector inner 0 5) ws g-ws] (g/return (str "[" ws (str/join ws items) ws "]")))
+       (g/let [items (g/vector inner 0 3) ws g-ws] (g/return (str "{" (str/join ws (for [i items] (str ":k" (count i) ws i))) "}")))
+       (g/let [items (g/vector g-atom 0 4)] (g/return (str "#{" (str/join " " (distinct items)) "}")))
+       (g/let [items (g/vector inner 0 3)] (g/return (str "#(" (str/join " " (cons "f" items)) ")")))
+       (g/let [x inner] (g/return (str "#_" x)))
+       (g/let [x inner c (g/elements ["; c" ";; two" ";;; three"])] (g/return (str x " " c "\n")))]))
+   g-atom))
+(def g-file (g/fmap (fn [fs] (str (str/join "\n\n" fs) "\n")) (g/vector g-form 1 12)))
+
+(defn run [cmd dir secs env]
+  (let [proc (apply p/process {:dir dir :out :string :err :string :in "" :extra-env env} cmd)
+        r (deref proc (* 1000 secs) ::timeout)]
+    (if (= r ::timeout) (do (p/destroy-tree proc) {:timeout true :exit -1 :out "" :err "timeout"}) r)))
+
+(let [{:keys [n seed]} opts
+      work (str (fs/create-temp-dir {:prefix "fuzz-format"}))
+      files (vec (for [i (range n)] (let [f (str work "/f" i ".clj")] (spit f (g/generate g-file 10 (+ seed i))) f)))
+      drive (str "(require 'cljfmt.core 'clojure.string)\n"
+                 "(doseq [f (clojure.string/split-lines (slurp (SYS/getenv \"CORPUS\")))]\n"
+                 "  (let [out (str (SYS/getenv \"OUT\") \"/\" (last (clojure.string/split f #\"/\")))]\n"
+                 "    (try (spit out (cljfmt.core/reformat-string (slurp f)))\n"
+                 "         (catch THROWABLE e (spit out (str \"!error \" (.getMessage e)))))))\n")
+      problems (atom [])]
+  (spit (str work "/corpus") (str/join "\n" files))
+  (spit (str work "/drive.cljf") (-> drive (str/replace "SYS" "clotran.host.system") (str/replace "THROWABLE" "clotran.host.throwable")))
+  (spit (str work "/drive.clj") (-> drive (str/replace "SYS" "System") (str/replace "THROWABLE" "Throwable")))
+  (fs/create-dirs (str work "/ct")) (fs/create-dirs (str work "/clj"))
+  (let [ct (run [(str clotran "/clotran") (str work "/drive.cljf")] here 600 {"CORPUS" (str work "/corpus") "OUT" (str work "/ct") "CLOTRAN_PATH" (str here "/src:" here "/resources")})
+        cj (run ["clj" "-Sdeps" "{:deps {dev.weavejester/cljfmt {:mvn/version \"0.16.6\"}}}" "-M" (str work "/drive.clj")] work 600 {"CORPUS" (str work "/corpus") "OUT" (str work "/clj")})]
+    (when (not= 0 (:exit ct)) (swap! problems conj (str "clotran did not finish: " (str/trim (str (:err ct) (:out ct))))))
+    (when (not= 0 (:exit cj)) (swap! problems conj (str "clj did not finish: " (str/trim (:err cj)))))
+    (doseq [f files :let [b (fs/file-name f) a (str work "/clj/" b) c (str work "/ct/" b)]]
+      (let [want (when (fs/exists? a) (slurp a)) got (when (fs/exists? c) (slurp c))]
+        (when (not= want got)
+          (swap! problems conj (str b ":\n   input: " (pr-str (slurp f)) "\n   clj:   " (pr-str want) "\n   clotran: " (pr-str got)))))))
+  (doseq [x (take 5 @problems)] (println x))
+  (println (str "fuzz-format: " n " files, " (count @problems) " problems"))
+  (if (System/getenv "FUZZ_KEEP") (println "kept:" work) (fs/delete-tree work))
+  (System/exit (if (empty? @problems) 0 1)))
