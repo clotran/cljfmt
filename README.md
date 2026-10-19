@@ -15,12 +15,14 @@ clotran's name. Nothing else is changed (clotran's `DEVIATIONS.md` 33 and
 
 ## Using it
 
-In a project's `deps.edn`:
+In an editor there is nothing to add: clotran's language server
+(`clotran lsp`, clotran-ide) already formats with it, carried by an
+installed clotran. In a program, the project's `deps.edn`:
 
     {:deps {clotran/cljfmt {:git/url "https://github.com/clotran/cljfmt.git"
-                            :git/sha "<a commit>"}}}
+                            :git/sha "40a9b02b87d7cb1ef63cdcbbb85581f1f89b207b"}}}
 
-then
+then `clotran deps`, then `clotran`, and
 
     (require '[cljfmt.core :as fmt])
     (fmt/reformat-string "(defn f [x]\n(+ x\n1))")
@@ -28,8 +30,7 @@ then
 
 `reformat-string` takes cljfmt's options map as its second argument, and
 `cljfmt/indents/clojure.clj` under `resources/` is the default indentation,
-read as cljfmt reads it (`io/resource`). clotran's language server formats
-with it (clotran's PLAN step 36).
+read as cljfmt reads it (`io/resource`).
 
 ## Tests
 
